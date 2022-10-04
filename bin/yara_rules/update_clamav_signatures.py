@@ -46,7 +46,10 @@ def download_file(url):
         'User-Agent': f'CVDUPDATE/0.3.3 ({str(uuid.uuid4())})'
     })
     if r.status_code == 429:
-        print(f"The remote server indicates that this IP is rate-limited. Please try again in 12 hours.")
+        print(
+            "The remote server indicates that this IP is rate-limited. Please try again in 12 hours."
+        )
+
         sys.exit(0)
     elif r.status_code != 200:
         print(f"Could not download {url} (Status: {r.status_code}).")
@@ -56,11 +59,11 @@ def download_file(url):
         if file_size is None:
             outfile.write(r.content)
             return
-        
+
         downloaded = 0
         chunk_size = 8192
         file_size = int(file_size)
-        print("Downloading: %s Bytes: %s" % (file_name, file_size))
+        print(f"Downloading: {file_name} Bytes: {file_size}")
         for d in r.iter_content(chunk_size):
             downloaded += len(d)
             outfile.write(d)
@@ -73,20 +76,19 @@ def download_file(url):
 
 def zlib_decompress(path, outpath):
     d = zlib.decompressobj(zlib.MAX_WBITS + 16)
-    input = open(path, "rb")
-    output = open(outpath, "wb")
-    if not input or not output:
-        print("[!] Error decompressing signatures.")
-        sys.exit(-1)
+    with open(path, "rb") as input:
+        output = open(outpath, "wb")
+        if not input or not output:
+            print("[!] Error decompressing signatures.")
+            sys.exit(-1)
 
-    while True:
-        chunk = input.read(2048)
-        if not chunk:
-            break
-        uncompressed = d.decompress(chunk)
-        output.write(uncompressed)
+        while True:
+            chunk = input.read(2048)
+            if not chunk:
+                break
+            uncompressed = d.decompress(chunk)
+            output.write(uncompressed)
 
-    input.close()
     output.close()
     os.remove(path)
 
@@ -98,26 +100,24 @@ def update_signatures(url, download):
     file_name = url.split('/')[-1]
     file_basename = file_name.split('.')[-2]
 
-    # Extract signatures
-    f = open(file_name, "rb")
-    if not f or len(f.read(512)) != 512:  # Skip the CVD header
-        print("[!] Error reading main.cvd!")
-        sys.exit(-1)
+    with open(file_name, "rb") as f:
+        if not f or len(f.read(512)) != 512:  # Skip the CVD header
+            print("[!] Error reading main.cvd!")
+            sys.exit(-1)
 
-    g = open("%s.tar.gz" % file_basename, "wb")
-    if not g:
-        f.close()
-        print("[!] Error writing to %s.tar.gz!" % file_basename)
-        sys.exit(-1)
+        g = open(f"{file_basename}.tar.gz", "wb")
+        if not g:
+            f.close()
+            print(f"[!] Error writing to {file_basename}.tar.gz!")
+            sys.exit(-1)
 
-    # Create a copy of the virus definitions without the ClamAV header (it becomes a valid TGZ file)
-    while True:
-        data = f.read(2048)
-        if not data:
-            break
-        g.write(data)
+            # Create a copy of the virus definitions without the ClamAV header (it becomes a valid TGZ file)
+        while True:
+            if data := f.read(2048):
+                g.write(data)
 
-    f.close()
+            else:
+                break
     g.close()
 
     # We need to keep a set of all the signatures seen, because there are duplicates in the ClamAV database and
@@ -125,20 +125,20 @@ def update_signatures(url, download):
     RULES = set()
 
     # Excract the signatures
-    zlib_decompress("%s.tar.gz" % file_basename, "%s.tar" % file_basename)
-    tar = tarfile.open("%s.tar" % file_basename)
-    tar.extract("%s.ndb" % file_basename)
-    os.chmod("%s.ndb" % file_basename, 0o644)
-    if "%s.ldb" % file_basename in tar.getnames():
-        tar.extract("%s.ldb" % file_basename)
-        os.chmod("%s.ldb" % file_basename, 0o644)
+    zlib_decompress(f"{file_basename}.tar.gz", f"{file_basename}.tar")
+    tar = tarfile.open(f"{file_basename}.tar")
+    tar.extract(f"{file_basename}.ndb")
+    os.chmod(f"{file_basename}.ndb", 0o644)
+    if f"{file_basename}.ldb" in tar.getnames():
+        tar.extract(f"{file_basename}.ldb")
+        os.chmod(f"{file_basename}.ldb", 0o644)
     tar.close()
-    parse_ndb("%s.ndb" % file_basename, "clamav.yara", file_basename != "main")
-    if os.path.exists("%s.ldb" % file_basename):
-        parse_ldb("%s.ldb" % file_basename, "clamav.yara", file_basename != "main")
-        os.remove("%s.ldb" % file_basename)
-    os.remove("%s.tar" % file_basename)
-    os.remove("%s.ndb" % file_basename)
+    parse_ndb(f"{file_basename}.ndb", "clamav.yara", file_basename != "main")
+    if os.path.exists(f"{file_basename}.ldb"):
+        parse_ldb(f"{file_basename}.ldb", "clamav.yara", file_basename != "main")
+        os.remove(f"{file_basename}.ldb")
+    os.remove(f"{file_basename}.tar")
+    os.remove(f"{file_basename}.ndb")
 
 # Work in the script's directory
 if os.path.dirname(sys.argv[0]) != "":

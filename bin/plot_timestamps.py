@@ -63,9 +63,10 @@ def process_sample(s, result, args):
     try:
         matcher = re.compile(r"The binary may have been compiled on a machine in the (UTC[+-][0-9]{1,2}) timezone")
         for output in s["Plugins"]["resources"]["plugin_output"]:
-            m = matcher.match(s["Plugins"]["resources"]["plugin_output"][output])
-            if m:
-                result.possible_timezones.add(m.group(1))
+            if m := matcher.match(
+                s["Plugins"]["resources"]["plugin_output"][output]
+            ):
+                result.possible_timezones.add(m[1])
                 break
     except KeyError:
         pass
@@ -87,7 +88,7 @@ def process_sample(s, result, args):
 
     # Update language data
     if "Detected languages" in s["Summary"]:
-        result.detected_languages.update(lang for lang in s["Summary"]["Detected languages"])
+        result.detected_languages.update(iter(s["Summary"]["Detected languages"]))
 
 ###############################################################################
 # Miscellaneous functions
@@ -113,9 +114,7 @@ def supports_color():
     plat = sys.platform
     supported_platform = plat != 'Pocket PC' and (plat != 'win32' or 'ANSICON' in os.environ)
     is_a_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
-    if not supported_platform or not is_a_tty:
-        return False
-    return True
+    return bool(supported_platform and is_a_tty)
 
 # -----------------------------------------------------------------------------
 
@@ -130,10 +129,12 @@ else:
 
 # -----------------------------------------------------------------------------
 
-def error(text): return "[" + red("!") + "] " + red("Error: " + text)
+def error(text):
+    return "[" + red("!") + "] " + red(f"Error: {text}")
 def warning(text): return "[" + orange("*") + "] Warning: " + text
 def success(text): return "[" + green("*") + "] " + green(text)
-def info(text): return "[ ] " + text
+def info(text):
+    return f"[ ] {text}"
 
 # -----------------------------------------------------------------------------
 
@@ -204,15 +205,18 @@ def validate_args():
     else:
         for chart_type in args.charts:
             if chart_type not in ["day", "week", "year"]:
-                print(error("%s is not a valid chart type." % chart_type))
+                print(error(f"{chart_type} is not a valid chart type."))
                 sys.exit(-1)
 
     if args.rebase_timezone:  # Convert the requested timezone into a timedelta.
         try:
             matcher = re.compile(r"(UTC)?([+-][0-9]{1,2})")
-            args.rebase_timezone = datetime.timedelta(hours=int(matcher.match(args.rebase_timezone).group(2)))
+            args.rebase_timezone = datetime.timedelta(
+                hours=int(matcher.match(args.rebase_timezone)[2])
+            )
+
         except:
-            print(error("%s is not a valid timezone." % args.rebase_timezone))
+            print(error(f"{args.rebase_timezone} is not a valid timezone."))
             sys.exit(-1)
     return args
 
@@ -263,11 +267,11 @@ def main():
     # Print the charts.
     print("\n###############################################################################")
     # The any() condition verifies that the input contains data to plot.
-    if "day" in args.charts and any(x for x in r.activity_hourly.values()):
+    if "day" in args.charts and any(r.activity_hourly.values()):
         print_charts(r.activity_hourly, "Distribution of timestamps over the day", args)
-    if "week" in args.charts and any(x for x in r.activity_weekly.values()):
+    if "week" in args.charts and any(r.activity_weekly.values()):
         print_charts(r.activity_weekly, "Distribution of timestamps over the week", args, weekday=True)
-    if "year" in args.charts and any(x for x in r.activity_yearly.values()):
+    if "year" in args.charts and any(r.activity_yearly.values()):
         print_charts(r.activity_yearly, "Distribution of timestamps over the years", args)
 
 

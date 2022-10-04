@@ -167,7 +167,7 @@ def apply_mapping(report):
             for key in mapping:
                 if re.match(key, o) or (type(plugins[p]["plugin_output"][o]) is str and re.match(key, plugins[p]["plugin_output"][o])):
                     for m in mapping[key]:
-                        if not m[1] in mapped_output[m[0]]:  # Do not add the same element twice.
+                        if m[1] not in mapped_output[m[0]]:  # Do not add the same element twice.
                             mapped_output[m[0]].append(m[1])
 
     # Remove empty columns.

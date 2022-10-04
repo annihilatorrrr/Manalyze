@@ -89,15 +89,15 @@ class YaraRule:
         self._rulename = self._rulename.replace(":", "_column_")  # exist for Dialer-317 and Dialer.317
         try:
             int(self._rulename)
-            self._rulename = "_%s" % self._rulename
+            self._rulename = f"_{self._rulename}"
         except ValueError:
             pass
         # There may be name conflicts between daily and main rules :(
         if is_daily:
-            self._rulename = "D_" + self._rulename
+            self._rulename = f"D_{self._rulename}"
 
         # Translate the signature and offset to Yara syntax
-        for i in range(0, len(signatures)):
+        for i in range(len(signatures)):
             self._translate_signature(signatures[i][0], i)
             self._translate_offset(signatures[i][1], i)
 
@@ -113,7 +113,7 @@ class YaraRule:
         s = s.replace("{", "[").replace("}", "]")  # Byte skips
         # Try to guess if it isn't an hexadecimal pattern.
         if any(c in "ghijljmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ" for c in s):
-            raise MalformedRuleError("Malformed rule: %s (%s)" % (self._meta_signature, s))
+            raise MalformedRuleError(f"Malformed rule: {self._meta_signature} ({s})")
         else:
             self._signatures.append("$a%d = { %s }" % (index, s))
 
@@ -134,11 +134,15 @@ class YaraRule:
         match = re.match(range_offset_pattern, offset)
         if match is not None:
             try:
-                o1 = int(match.group(1))
-                o2 = int(match.group(1))
+                o1 = int(match[1])
+                o2 = int(match[1])
                 self._conditions.append("$a%d in (%s .. %s)" % (index, o1, o1 + o2))
             except ValueError:
-                self._conditions.append("$a%d in (%s .. %s + %s)" % (index, match.group(1), match.group(1), match.group(2)))
+                self._conditions.append(
+                    "$a%d in (%s .. %s + %s)"
+                    % (index, match[1], match[1], match[2])
+                )
+
             return
 
         # In the version info:
@@ -149,62 +153,64 @@ class YaraRule:
 
         # Now, the complex cases: extended conditions.
         match = re.match(extended_offset_pattern, offset)
-        if match is not None:  # Relative offset (to EOF, EP, etc.)
-            relative_to = match.group(1)
+        if match is None:
+            raise MalformedRuleError(
+                f"Unable to understand the following offset: {offset}"
+            )
 
-            base_yara_offset = None
-            if relative_to == "EP":
-                base_yara_offset = "manape.ep"
+        relative_to = match[1]
 
-            # Conditions regarding the end of file
-            if relative_to == "EOF":
-                base_yara_offset = "filesize"
+        base_yara_offset = None
+        if relative_to == "EOF":
+            base_yara_offset = "filesize"
 
-            if relative_to[0] == "S":
-                try:
-                    section_number = int(relative_to[1:])
-                    base_yara_offset = "manape.sections[%d].start" % section_number
-                except ValueError:
-                    pass
+        elif relative_to == "EP":
+            base_yara_offset = "manape.ep"
 
-                if relative_to == "SL":  # Start of the last section
-                    base_yara_offset = "manape.sections[manape.num_sections].start"
-                elif relative_to[1] == 'E':  # SEx : contained inside section x
-                    num_section = int(relative_to[2:])
-                    self._conditions.append("$a%d in (manape.sections[%d].start .. "
-                                            "manape.sections[%d].start + manape.sections[%d].size)"
-                                            % (index, num_section, num_section, num_section))
-                    return  # No need to look at offsets for SEx
+        if relative_to[0] == "S":
+            try:
+                section_number = int(relative_to[1:])
+                base_yara_offset = "manape.sections[%d].start" % section_number
+            except ValueError:
+                pass
+
+            if relative_to == "SL":  # Start of the last section
+                base_yara_offset = "manape.sections[manape.num_sections].start"
+            elif relative_to[1] == 'E':  # SEx : contained inside section x
+                num_section = int(relative_to[2:])
+                self._conditions.append("$a%d in (manape.sections[%d].start .. "
+                                        "manape.sections[%d].start + manape.sections[%d].size)"
+                                        % (index, num_section, num_section, num_section))
+                return  # No need to look at offsets for SEx
 
             # Now we have the base relative to which the offset is.
-            if base_yara_offset is None:
-                print("Unhandled extended condition: %s" % offset)
-                return
+        if base_yara_offset is None:
+            print(f"Unhandled extended condition: {offset}")
+            return
 
             # Simple case: just an offset
-            if not range_offset_pattern.match(match.group(4)):
-                if int(match.group(4)) != 0:
-                    self._conditions.append("$a%d at %s %s %s" % (index, base_yara_offset, match.group(3), match.group(4)))
-                else:
-                    self._conditions.append("$a%d at %s" % (index, base_yara_offset))
-            else:
-                split = match.group(4).split(",")
-                x = int(split[0])
-                y = int(split[1])
-                if match.group(2) == '+':
-                    self._conditions.append("$a%d in (%s+%d .. %s + %d)" \
+        if range_offset_pattern.match(match[4]):
+            split = match[4].split(",")
+            x = int(split[0])
+            y = int(split[1])
+            if match[2] == '+':
+                self._conditions.append("$a%d in (%s+%d .. %s + %d)" \
                                       % (index, base_yara_offset, x, base_yara_offset, x + y))
-                else:
-                    if y < x:
-                        self._conditions.append("$a%d in (%s - %d .. %s - %d)" \
-                                          % (index, base_yara_offset, x, base_yara_offset, x - y))
-                    elif y > x:
-                        self._conditions.append("$a%d in (%s - %d .. %s + %d)" \
-                                          % (index, base_yara_offset, x, base_yara_offset, y - x))
-                    else:  # x == y
-                        self._conditions.append("$a%d in (%s - %d .. %s)" % (index, base_yara_offset, x, base_yara_offset))
+            elif y < x:
+                self._conditions.append("$a%d in (%s - %d .. %s - %d)" \
+                                      % (index, base_yara_offset, x, base_yara_offset, x - y))
+            elif y > x:
+                self._conditions.append("$a%d in (%s - %d .. %s + %d)" \
+                                      % (index, base_yara_offset, x, base_yara_offset, y - x))
+            else:  # x == y
+                self._conditions.append("$a%d in (%s - %d .. %s)" % (index, base_yara_offset, x, base_yara_offset))
+        elif int(match[4]) != 0:
+            self._conditions.append(
+                "$a%d at %s %s %s" % (index, base_yara_offset, match[3], match[4])
+            )
+
         else:
-            raise MalformedRuleError("Unable to understand the following offset: %s" % offset)
+            self._conditions.append("$a%d at %s" % (index, base_yara_offset))
 
     def get_meta_signature(self):
         return self._meta_signature
@@ -233,28 +239,38 @@ class YaraRule:
             i = 0
             while i < len(tokens):
                 t = tokens[i]
-                if t == "(" or t == ")":
+                if t in ["(", ")"]:
                     conditions += t
                 elif t == "&":
                     conditions += " and "
                 elif t == "|":
                     conditions += " or "
-                elif t == ">" or t == "<" or t == "," or t == "=":
+                elif t in [">", "<", ",", "="]:
                     # If they haven't been detected while looking ahead, it means that
                     # they arrive after a full expression (i.e. (0&1)>X,Y), which can't
                     # be translated to a Yara rule as far as I know.
-                    print("Unable to translate a logical signature for %s. Skipping..." % self._meta_signature)
+                    print(
+                        f"Unable to translate a logical signature for {self._meta_signature}. Skipping..."
+                    )
+
                     return ""
                 else:
                     try:
                         index = int(t)
                         # Check for a negation or a count
-                        if i + 2 < len(tokens) and (tokens[i+1] == "=" or tokens[i+1] == ">" or tokens[i+1] == "<"):
+                        if i + 2 < len(tokens) and tokens[i + 1] in [
+                            "=",
+                            ">",
+                            "<",
+                        ]:
                             if i + 3 < len(tokens) and tokens[i+2] == ",":
-                                print("Unable to translate a logical signature for %s. Skipping..." % self._meta_signature)
+                                print(
+                                    f"Unable to translate a logical signature for {self._meta_signature}. Skipping..."
+                                )
+
                                 return ""
                             if tokens[i+1] == "=" and tokens[i+2] == "0":  # Negation
-                                conditions += "not %s" % self._conditions[index]
+                                conditions += f"not {self._conditions[index]}"
                                 i += 2  # Skip the "=0"
                             else:  # Count
                                 if tokens[i+1] == "=":
@@ -274,7 +290,7 @@ class YaraRule:
                         else:
                             conditions += self._conditions[index]  # The token is the number of the rule
                     except ValueError:
-                        print("%s token not implemented!" % t)
+                        print(f"{t} token not implemented!")
                         sys.exit(1)
                 i += 1
 
@@ -293,7 +309,7 @@ def parse_ndb(input, output, is_daily=False):
                 # Ignore minfl & maxfl, since they represent ClamAV internal engine functionality levels.
 
                 # We only care about signatures for PE executables.
-                if target_type != TargetType.PE and target_type != TargetType.ANY:
+                if target_type not in [TargetType.PE, TargetType.ANY]:
                     continue
 
                 # Ignore exploits, are we are only interested in malware signatures
@@ -303,14 +319,14 @@ def parse_ndb(input, output, is_daily=False):
                 try:
                     rule = YaraRule(malware_name, [[signature, offset]], is_daily=is_daily)
                 except MalformedRuleError:
-                    print("Rule %s seems to be malformed. Skipping..." % malware_name)
+                    print(f"Rule {malware_name} seems to be malformed. Skipping...")
                     continue
 
-                if not rule.get_meta_signature() in RULES:
+                if rule.get_meta_signature() not in RULES:
                     RULES.add(rule.get_meta_signature())
                     g.write(rule.__str__().encode())
                 else:
-                    print("Rule %s already exists!" % rule.get_meta_signature())
+                    print(f"Rule {rule.get_meta_signature()} already exists!")
 
 
 def parse_ldb(input, output, is_daily=False):
@@ -321,13 +337,18 @@ def parse_ldb(input, output, is_daily=False):
                     continue
                 data = line.rstrip("\n").split(";")
                 malware_name = data[0]
-                target_block = dict()
-                for block in data[1].split(","):
-                    target_block[block.split(":")[0]] = block.split(":")[1]
+                target_block = {
+                    block.split(":")[0]: block.split(":")[1]
+                    for block in data[1].split(",")
+                }
+
                 logical_expression = data[2]
                 rules = data[3:]
 
-                if int(target_block["Target"]) != TargetType.PE and int(target_block["Target"]) != TargetType.ANY:
+                if int(target_block["Target"]) not in [
+                    TargetType.PE,
+                    TargetType.ANY,
+                ]:
                     continue
 
                 # Unsupported fuzzy hashes of the icons
@@ -352,14 +373,14 @@ def parse_ldb(input, output, is_daily=False):
                     rule = YaraRule(malware_name, signatures, logical_expression=logical_expression, is_daily=is_daily)
                     translated_rule = rule.__str__()
                 except MalformedRuleError:
-                    print("Rule %s seems to be malformed. Skipping..." % malware_name)
+                    print(f"Rule {malware_name} seems to be malformed. Skipping...")
                     continue
 
-                if not rule.get_meta_signature() in RULES and translated_rule:
+                if rule.get_meta_signature() not in RULES and translated_rule:
                     RULES.add(rule.get_meta_signature())
                     g.write(translated_rule.encode())
                 elif translated_rule:
-                    print("Rule %s already exists!" % rule.get_meta_signature())
+                    print(f"Rule {rule.get_meta_signature()} already exists!")
 
 
 def main():
