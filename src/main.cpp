@@ -562,10 +562,11 @@ int main(int argc, char** argv)
 
 	// Do the actual analysis on all the input files
 	unsigned int count = 0;
+	unsigned int tsize = targets.size();
 	for (const auto& it : targets)
 	{
 		perform_analysis(it, opts, extraction_directory, selected_categories, selected_plugins, conf, formatter);
-		if (++count % 1000 == 0) {
+		if (++count % 1000 == 0 && count < tsize) {
 			formatter->format(std::cout, false); // Flush the formatter from time to time, to avoid eating up all the RAM when analyzing gigs of files.
 		}
 	}
