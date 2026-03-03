@@ -201,15 +201,19 @@ bool check_dlls(const mana::PE& pe,
 				const std::string& description,
 				pResult res)
 {
-	mana::const_shared_strings found_imports = pe.find_imports(".*", dll_regex);
-	if (found_imports && !found_imports->empty())
+	auto matching_dlls = pe.find_imported_dlls(dll_regex);
+	if (matching_dlls && !matching_dlls->empty())
 	{
 		res->raise_level(level);
 		io::pNode info = std::make_shared<io::OutputTreeNode>(description,
 																io::OutputTreeNode::STRINGS,
 																io::OutputTreeNode::NEW_LINE);
-		for (const auto& it : *found_imports) {
-			info->append(it);
+		for (const auto& dll : *matching_dlls)
+		{
+			auto name = dll->get_name();
+			if (name != nullptr) {
+				info->append(*name);
+			}
 		}
 		res->add_information(info);
 		return true;
