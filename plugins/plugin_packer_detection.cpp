@@ -31,8 +31,15 @@ namespace plugin {
 // Check the section names against a list of known names.
 const std::vector<std::string> common_names = {
 	".text",
+	".text0",
+	".text1",
+	".text2",
+	".text3",
 	".textbss",
 	".data",
+	".data1",
+	".data2",
+	".data3",
 	".DATA",
 	"DATA",
 	"_RDATA",
@@ -41,6 +48,8 @@ const std::vector<std::string> common_names = {
 	".rsrc",
 	".idata",
 	".edata",
+	".export",
+	".impdata",
 	".pdata",
 	".rodata",
 	".reloc",
@@ -56,10 +65,24 @@ const std::vector<std::string> common_names = {
 	".crt",
 	".CRT",
 	"INIT",
-	".oprc",
+	".orpc",
 	".detourc",
 	".detourd",
-	".didat"
+	".didat",
+	".didata",
+	".fptable",
+	".giats",
+	".gljmp",
+	".itext",
+	".sdata",
+	".shared",
+	".xdata",
+	"Shared",
+	"edata",
+	"idata",
+	"rdata",
+	"shared",
+	"text"
 };
 
 // Also check for known packer section names (i.e. UPX0, etc.)
