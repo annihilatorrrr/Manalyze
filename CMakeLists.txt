@@ -257,9 +257,24 @@ if ("${CMAKE_SYSTEM}" MATCHES "Linux")
                 LIBRARY DESTINATION ${MANALYZE_INSTALL_PLUGIN_SUBDIR})
     endif()
 
-    # Copy the configuration file template.
-    install(FILES bin/manalyze.conf
-            DESTINATION ${MANALYZE_INSTALL_CONFIG_SUBDIR})
+    # Install the default configuration without overwriting user edits.
+    set(MANALYZE_INSTALL_CONFIG_CODE [=[
+        if(IS_ABSOLUTE "@CMAKE_INSTALL_SYSCONFDIR@")
+            set(config_dir "$ENV{DESTDIR}@CMAKE_INSTALL_SYSCONFDIR@/manalyze")
+        else()
+            set(config_dir "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_SYSCONFDIR@/manalyze")
+        endif()
+        set(config_path "${config_dir}/manalyze.conf")
+        if(NOT EXISTS "${config_path}")
+            file(MAKE_DIRECTORY "${config_dir}")
+            file(INSTALL
+                 DESTINATION "${config_dir}"
+                 TYPE FILE
+                 FILES "@CMAKE_CURRENT_SOURCE_DIR@/bin/manalyze.conf")
+        endif()
+    ]=])
+    string(CONFIGURE "${MANALYZE_INSTALL_CONFIG_CODE}" MANALYZE_INSTALL_CONFIG_CODE @ONLY)
+    install(CODE "${MANALYZE_INSTALL_CONFIG_CODE}")
 endif()
 
 # Uninstall target using install_manifest.txt
