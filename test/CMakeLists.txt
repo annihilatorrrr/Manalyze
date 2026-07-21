@@ -7,6 +7,7 @@ endif()
 
 add_executable(manalyze-tests fixtures.cpp hash-library.cpp pe.cpp imports.cpp resources.cpp section.cpp escape.cpp encoding.cpp base64.cpp utils.cpp cli.cpp config_parser.cpp output_formatter.cpp windows_macro_compat.cpp
                                ../src/import_hash.cpp ../src/cli.cpp ../src/config_parser.cpp ../src/output_formatter.cpp)
+add_dependencies(manalyze-tests manalyze)
 
 target_link_libraries(
 						manalyze-tests

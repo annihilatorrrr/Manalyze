@@ -17,6 +17,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -29,6 +30,25 @@ std::string test_file()
 {
     const auto root = std::filesystem::current_path();
     return (root / "test" / "testfiles" / "manatest.exe").string();
+}
+
+std::string manalyze_binary()
+{
+	const auto root = std::filesystem::current_path();
+#ifdef _WIN32
+	return (root / "bin" / "manalyze.exe").string();
+#else
+	return (root / "bin" / "manalyze").string();
+#endif
+}
+
+std::string null_device()
+{
+#ifdef _WIN32
+	return "NUL";
+#else
+	return "/dev/null";
+#endif
 }
 
 std::vector<std::string> build_args(const std::vector<std::string>& args)
@@ -74,85 +94,140 @@ BOOST_AUTO_TEST_CASE(cli_parsing_examples)
 {
     const std::string input = test_file();
 
-    {
-        Options opts;
-        auto args = build_args({"-dresources", "-dexports", input});
-        BOOST_CHECK(parse_ok(args, opts));
-        BOOST_CHECK_EQUAL(opts.dump.size(), 2U);
-        BOOST_CHECK_EQUAL(opts.dump[0], "resources");
-        BOOST_CHECK_EQUAL(opts.dump[1], "exports");
+	{
+		Options opts;
+		auto args = build_args({"-dresources", "-dexports", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 2U);
+		BOOST_CHECK_EQUAL(opts.dump[0], "resources");
+		BOOST_CHECK_EQUAL(opts.dump[1], "exports");
+	}
+
+	{
+		Options opts;
+		auto args = build_args({"--dump=imports,sections", "--hashes", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 2U);
+		BOOST_CHECK_EQUAL(opts.dump[0], "imports");
+		BOOST_CHECK_EQUAL(opts.dump[1], "sections");
+		BOOST_CHECK(opts.hashes);
     }
 
-    {
-        Options opts;
-        auto args = build_args({"--dump=imports,sections", "--hashes", input});
-        BOOST_CHECK(parse_ok(args, opts));
-        BOOST_CHECK_EQUAL(opts.dump.size(), 2U);
-        BOOST_CHECK_EQUAL(opts.dump[0], "imports");
-        BOOST_CHECK_EQUAL(opts.dump[1], "sections");
-        BOOST_CHECK(opts.hashes);
-    }
+	{
+		Options opts;
+		auto args = build_args({"-o", "json", "-d", "all", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_CHECK_EQUAL(opts.output, "json");
+		BOOST_CHECK(opts.output_set);
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.dump[0], "all");
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], input);
+	}
 
-    {
-        Options opts;
-        auto args = build_args({"-o", "json", "-d", "all", input});
-        BOOST_CHECK(parse_ok(args, opts));
-        BOOST_CHECK_EQUAL(opts.output, "json");
-        BOOST_CHECK(opts.output_set);
-        BOOST_CHECK_EQUAL(opts.dump.size(), 1U);
-        BOOST_CHECK_EQUAL(opts.dump[0], "all");
-    }
+	{
+		Options opts;
+		auto args = build_args({"-d", "all", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.dump[0], "all");
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], input);
+	}
+
+	{
+		Options opts;
+		auto args = build_args({"-p", "all", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.plugins.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.plugins[0], "all");
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], input);
+	}
+
+	{
+		Options opts;
+		auto args = build_args({"-p", "peid", "-p", "clamav", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.plugins.size(), 2U);
+		BOOST_CHECK_EQUAL(opts.plugins[0], "peid");
+		BOOST_CHECK_EQUAL(opts.plugins[1], "clamav");
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], input);
+	}
+
+	{
+		Options opts;
+		auto args = build_args({"-d", "all", "-p", "all", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.dump[0], "all");
+		BOOST_REQUIRE_EQUAL(opts.plugins.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.plugins[0], "all");
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], input);
+	}
 
     {
         Options opts;
         auto args = build_args({input, "-o", "json", "-d", "all"});
-        BOOST_CHECK(parse_ok(args, opts));
+		BOOST_REQUIRE(parse_ok(args, opts));
         BOOST_CHECK_EQUAL(opts.output, "json");
         BOOST_CHECK(opts.output_set);
-        BOOST_CHECK_EQUAL(opts.dump.size(), 1U);
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 1U);
         BOOST_CHECK_EQUAL(opts.dump[0], "all");
-        BOOST_CHECK_EQUAL(opts.pe.size(), 1U);
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
         BOOST_CHECK_EQUAL(opts.pe[0], input);
     }
 
     {
         Options opts;
         auto args = build_args({"-ojson", "-dall", input});
-        BOOST_CHECK(parse_ok(args, opts));
+		BOOST_REQUIRE(parse_ok(args, opts));
         BOOST_CHECK_EQUAL(opts.output, "json");
         BOOST_CHECK(opts.output_set);
-        BOOST_CHECK_EQUAL(opts.dump.size(), 1U);
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 1U);
         BOOST_CHECK_EQUAL(opts.dump[0], "all");
     }
 
     {
         Options opts;
         auto args = build_args({"-p", "virustotal", input, "-d", "all"});
-        BOOST_CHECK(parse_ok(args, opts));
-        BOOST_CHECK_EQUAL(opts.plugins.size(), 1U);
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.plugins.size(), 1U);
         BOOST_CHECK_EQUAL(opts.plugins[0], "virustotal");
-        BOOST_CHECK_EQUAL(opts.dump.size(), 1U);
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 1U);
         BOOST_CHECK_EQUAL(opts.dump[0], "all");
-        BOOST_CHECK_EQUAL(opts.pe.size(), 1U);
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
         BOOST_CHECK_EQUAL(opts.pe[0], input);
     }
 
     {
         Options opts;
         auto args = build_args({"-pvirustotal", input, "-dall"});
-        BOOST_CHECK(parse_ok(args, opts));
-        BOOST_CHECK_EQUAL(opts.plugins.size(), 1U);
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.plugins.size(), 1U);
         BOOST_CHECK_EQUAL(opts.plugins[0], "virustotal");
-        BOOST_CHECK_EQUAL(opts.dump.size(), 1U);
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 1U);
         BOOST_CHECK_EQUAL(opts.dump[0], "all");
-        BOOST_CHECK_EQUAL(opts.pe.size(), 1U);
-        BOOST_CHECK_EQUAL(opts.pe[0], input);
-    }
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], input);
+	}
 
-    {
-        Options opts;
-        auto args = build_args({"--quiet", input});
-        BOOST_CHECK(parse_ok(args, opts));
+	{
+		Options opts;
+		auto args = build_args({"-xout/", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_CHECK(opts.extract_set);
+		BOOST_CHECK_EQUAL(opts.extract, "out/");
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], input);
+	}
+
+	{
+		Options opts;
+		auto args = build_args({"--quiet", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
         BOOST_CHECK(opts.quiet);
         BOOST_CHECK(opts.log_level_set);
         BOOST_CHECK_EQUAL(opts.log_level, "error");
@@ -161,7 +236,7 @@ BOOST_AUTO_TEST_CASE(cli_parsing_examples)
     {
         Options opts;
         auto args = build_args({"--log-level", "off", input});
-        BOOST_CHECK(parse_ok(args, opts));
+		BOOST_REQUIRE(parse_ok(args, opts));
         BOOST_CHECK(opts.log_level_set);
         BOOST_CHECK_EQUAL(opts.log_level, "off");
     }
@@ -169,7 +244,7 @@ BOOST_AUTO_TEST_CASE(cli_parsing_examples)
     {
         Options opts;
         auto args = build_args({"--log-level=debug", input});
-        BOOST_CHECK(parse_ok(args, opts));
+		BOOST_REQUIRE(parse_ok(args, opts));
         BOOST_CHECK(opts.log_level_set);
         BOOST_CHECK_EQUAL(opts.log_level, "debug");
     }
@@ -189,6 +264,58 @@ BOOST_AUTO_TEST_CASE(cli_parsing_examples)
     }
 }
 
+BOOST_AUTO_TEST_CASE(cli_help_examples_are_supported)
+{
+	const std::string input = test_file();
+
+	{
+		Options opts;
+		auto args = build_args({input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], input);
+	}
+
+	{
+		Options opts;
+		auto args = build_args({"-dresources", "-dexports", "-x", "out/", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 2U);
+		BOOST_CHECK_EQUAL(opts.dump[0], "resources");
+		BOOST_CHECK_EQUAL(opts.dump[1], "exports");
+		BOOST_CHECK(opts.extract_set);
+		BOOST_CHECK_EQUAL(opts.extract, "out/");
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], input);
+	}
+
+	{
+		Options opts;
+		auto args = build_args({"--dump=imports,sections", "--hashes", input});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 2U);
+		BOOST_CHECK_EQUAL(opts.dump[0], "imports");
+		BOOST_CHECK_EQUAL(opts.dump[1], "sections");
+		BOOST_CHECK(opts.hashes);
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], input);
+	}
+
+	{
+		Options opts;
+		auto args = build_args({"-r", "malwares/", "--plugins=peid,clamav", "--dump", "all"});
+		BOOST_REQUIRE(parse_ok(args, opts));
+		BOOST_CHECK(opts.recursive);
+		BOOST_REQUIRE_EQUAL(opts.pe.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.pe[0], "malwares/");
+		BOOST_REQUIRE_EQUAL(opts.plugins.size(), 2U);
+		BOOST_CHECK_EQUAL(opts.plugins[0], "peid");
+		BOOST_CHECK_EQUAL(opts.plugins[1], "clamav");
+		BOOST_REQUIRE_EQUAL(opts.dump.size(), 1U);
+		BOOST_CHECK_EQUAL(opts.dump[0], "all");
+	}
+}
+
 BOOST_AUTO_TEST_CASE(cli_version_does_not_require_pe_argument)
 {
     Options opts;
@@ -196,4 +323,10 @@ BOOST_AUTO_TEST_CASE(cli_version_does_not_require_pe_argument)
     BOOST_CHECK(parse_ok(args, opts));
     BOOST_CHECK(opts.version);
     BOOST_CHECK(opts.pe.empty());
+}
+
+BOOST_AUTO_TEST_CASE(cli_options_without_pe_show_help_successfully)
+{
+	const std::string command = "\"" + manalyze_binary() + "\" --quiet > " + null_device();
+	BOOST_CHECK_EQUAL(std::system(command.c_str()), 0);
 }
