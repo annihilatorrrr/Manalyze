@@ -15,15 +15,15 @@
     along with Manalyze.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifdef _WIN32
+# include <windows.h>
+#endif
+
 #include "manacommons/color.h"
 
 #include <algorithm>
 #include <atomic>
 #include <cctype>
-
-#ifdef _WIN32
-# include <windows.h>
-#endif
 
 namespace utils
 {
