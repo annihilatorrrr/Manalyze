@@ -36,6 +36,16 @@
 namespace bai = boost::asio::ip;
 namespace js = json_spirit;
 
+namespace asio_compat {
+
+#if BOOST_VERSION >= 106600
+typedef boost::asio::io_context io_context;
+#else
+typedef boost::asio::io_service io_context;
+#endif
+
+}
+
 namespace plugin {
 
 #if defined WITH_OPENSSL
@@ -305,21 +315,19 @@ bool vt_api_interact(const std::string& hash,
 // Version of the function which establishes a plain HTTP connection.
 bool query_virus_total(const std::string& hash, const std::string& api_key, std::string& destination)
 {
-	boost::asio::io_service io_service;
+	asio_compat::io_context io_context;
 
 	// Get a list of endpoints corresponding to the server name.
-	bai::tcp::resolver resolver(io_service);
-	bai::tcp::resolver::query query("www.virustotal.com", "http");
-	bai::tcp::resolver::iterator endpoint_iterator = resolver.resolve(query);
-	bai::tcp::resolver::iterator end;
+	bai::tcp::resolver resolver(io_context);
+	auto endpoints = resolver.resolve("www.virustotal.com", "http");
 
 	// Try each endpoint until we successfully establish a connection.
-	bai::tcp::socket socket(io_service);
+	bai::tcp::socket socket(io_context);
 	boost::system::error_code error = boost::asio::error::host_not_found;
-	while (error && endpoint_iterator != end)
+	for (auto endpoint_iterator = endpoints.begin(); error && endpoint_iterator != endpoints.end(); ++endpoint_iterator)
 	{
 		socket.close();
-		socket.connect(*endpoint_iterator++, error);
+		socket.connect(*endpoint_iterator, error);
 	}
 	if (error)
 	{
@@ -340,23 +348,21 @@ bool query_virus_total(const std::string& hash, const std::string& api_key, std:
 	ssl::context ctx(ssl::context::sslv23);
 	ctx.set_default_verify_paths();
 
-	boost::asio::io_service io_service;
+	asio_compat::io_context io_context;
 
 	// Get a list of endpoints corresponding to the server name.
-	bai::tcp::resolver resolver(io_service);
-	bai::tcp::resolver::query query("www.virustotal.com", "https");
-	bai::tcp::resolver::iterator endpoint_iterator = resolver.resolve(query);
-	bai::tcp::resolver::iterator end;
+	bai::tcp::resolver resolver(io_context);
+	auto endpoints = resolver.resolve("www.virustotal.com", "https");
 
 	// Try each endpoint until we successfully establish a connection.
-	sslsocket socket(io_service, ctx);
+	sslsocket socket(io_context, ctx);
 	boost::system::error_code error = boost::asio::error::host_not_found;
-	while (error && endpoint_iterator != end)
+	for (auto endpoint_iterator = endpoints.begin(); error && endpoint_iterator != endpoints.end(); ++endpoint_iterator)
 	{
 		socket.next_layer().close();
-		socket.next_layer().connect(*endpoint_iterator++, error);
+		socket.next_layer().connect(*endpoint_iterator, error);
 		socket.set_verify_mode(ssl::verify_peer);
-		socket.set_verify_callback(ssl::rfc2818_verification("www.virustotal.com"));
+		socket.set_verify_callback(ssl::host_name_verification("www.virustotal.com"));
 		socket.handshake(sslsocket::client, error);
 	}
 	if (error)

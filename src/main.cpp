@@ -49,6 +49,10 @@
 #include "cli.h"
 #include "manalyze_version.h"
 
+#ifdef ERROR
+# undef ERROR
+#endif
+
 #if defined WITH_OPENSSL
 # include <openssl/opensslv.h>  // Used to display OpenSSL's version
 #endif
