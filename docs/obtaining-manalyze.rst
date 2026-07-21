@@ -5,9 +5,9 @@ Obtaining the tool
 Binary distributions
 ====================
 
-Windows users can download the latest binaries `here <https://manalyzer.org/static/manalyze.rar>`_. Unzip the archive somewhere on your filesystem and you're ready to go! All the binaries are signed with a certificate presenting the following fingerprint : ``26fc24c12b2d84f77615cf6299e3e4ca4f3878fc``.
+Prebuilt Windows, Linux, and macOS archives are attached to the `GitHub Releases <https://github.com/JusticeRage/Manalyze/releases>`_ page. Download the archive for your operating system and extract it somewhere on your filesystem.
 
-Deb packages will hopefully be offered at some point but right now, using Manalyze on other operating systems requires compiling it yourself.
+Each archive includes ``bin/manalyze`` or ``bin/manalyze.exe``, all generated ``.dll``, ``.so``, and ``.dylib`` files from ``bin/`` where present, built plugin libraries including the VirusTotal plugin, ``bin/manalyze.conf``, and ``bin/yara_rules/`` so Manalyze can run from the extracted directory.
 
 Building Manalyze
 =================

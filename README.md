@@ -70,7 +70,7 @@ If you need to build Manalyze on a machine with no internet access, you have to 
 Place the two folders in the `external` folder as `external/yara` and `external/hash-library` respectively. Then run `cmake . -DGitHub=OFF` and continue as you normally would.
 
 ### Binaries
-- [Windows x64 binaries](https://manalyzer.org/static/manalyze_x64.zip)
+Prebuilt Windows, Linux, and macOS archives are attached to the [GitHub Releases](https://github.com/JusticeRage/Manalyze/releases) page. Each archive includes `bin/manalyze` or `bin/manalyze.exe`, all generated `.dll`, `.so`, and `.dylib` files from `bin/` where present, built plugin libraries including the VirusTotal plugin, `bin/manalyze.conf`, and `bin/yara_rules/` so Manalyze can run from the extracted directory.
 
 ### Docker image
 A Docker image for Manalyze is provided by the community. Run `docker pull evanowe/manalyze` and get additional information [here](https://hub.docker.com/r/evanowe/manalyze).
