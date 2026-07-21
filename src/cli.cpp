@@ -128,7 +128,6 @@ bool parse_args(Options& opts, int argc, char**argv, const HelpPrinter& help_pri
     app.add_flag("-v,--version", opts.version, "Prints the program's version.");
     app.add_option("pe", opts.pe, "The PE to analyze. Multiple files may be specified.")
         ->expected(-1)
-        ->required()
         ->type_name("FILE");
     app.add_flag("-r,--recursive", opts.recursive, "Scan all files in a directory (subdirectories will be ignored).");
     app.add_flag("-q,--quiet", opts.quiet, "Only display errors.");
@@ -215,7 +214,7 @@ bool parse_args(Options& opts, int argc, char**argv, const HelpPrinter& help_pri
             ss << "* " << OPENSSL_VERSION_TEXT << " (OpenSSL Project, OpenSSL License)" << std::endl;
         #endif
         std::cout << ss.str();
-        exit(0);
+        return true;
     }
     else if (opts.pe.empty())
     {

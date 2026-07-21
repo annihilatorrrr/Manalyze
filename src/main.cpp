@@ -526,6 +526,9 @@ int main(int argc, char** argv)
 	if (!parse_args(opts, argc, argv, print_help, validate_args)) {
 		return -1;
 	}
+	if (opts.version) {
+		return 0;
+	}
 	if (opts.log_level_set) {
 		utils::set_log_level_from_string(opts.log_level);
 	}

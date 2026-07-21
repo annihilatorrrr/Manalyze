@@ -188,3 +188,12 @@ BOOST_AUTO_TEST_CASE(cli_parsing_examples)
         BOOST_CHECK_EQUAL(help_count, 1);
     }
 }
+
+BOOST_AUTO_TEST_CASE(cli_version_does_not_require_pe_argument)
+{
+    Options opts;
+    auto args = build_args({"--version"});
+    BOOST_CHECK(parse_ok(args, opts));
+    BOOST_CHECK(opts.version);
+    BOOST_CHECK(opts.pe.empty());
+}
