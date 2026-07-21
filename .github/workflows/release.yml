@@ -177,7 +177,7 @@ jobs:
           set -euo pipefail
           package_name="manalyze-${RELEASE_TAG}-${{ matrix.platform }}-x64"
           package_dir="dist/$package_name"
-          package_bin="$package_dir/bin"
+          package_bin="$package_dir"
           mkdir -p "$package_bin"
 
           cp build/bin/manalyze "$package_bin/"
@@ -203,7 +203,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $packageName = "manalyze-$env:RELEASE_TAG-windows-x64"
           $packageDir = "dist/$packageName"
-          $packageBin = "$packageDir/bin"
+          $packageBin = $packageDir
           New-Item -ItemType Directory -Force -Path $packageBin | Out-Null
 
           Copy-Item "build/bin/manalyze.exe" $packageBin
@@ -211,11 +211,11 @@ jobs:
           Copy-Item "bin/manalyze.conf" $packageBin
           Copy-Item "bin/yara_rules" $packageBin -Recurse
 
-          if (-not (Test-Path "$packageBin/manalyze.exe")) { throw "manalyze.exe is missing from package bin directory" }
-          if (-not (Get-ChildItem $packageBin -File -Filter "*.dll")) { throw "No DLL files were copied into package bin directory" }
-          if (-not (Get-ChildItem $packageBin -File | Where-Object { $_.Name -like "*plugin_virustotal*" })) { throw "VirusTotal plugin is missing from package bin directory" }
-          if (-not (Test-Path "$packageBin/manalyze.conf")) { throw "manalyze.conf is missing from package bin directory" }
-          if (-not (Test-Path "$packageBin/yara_rules")) { throw "yara_rules directory is missing from package bin directory" }
+          if (-not (Test-Path "$packageBin/manalyze.exe")) { throw "manalyze.exe is missing from package directory" }
+          if (-not (Get-ChildItem $packageBin -File -Filter "*.dll")) { throw "No DLL files were copied into package directory" }
+          if (-not (Get-ChildItem $packageBin -File | Where-Object { $_.Name -like "*plugin_virustotal*" })) { throw "VirusTotal plugin is missing from package directory" }
+          if (-not (Test-Path "$packageBin/manalyze.conf")) { throw "manalyze.conf is missing from package directory" }
+          if (-not (Test-Path "$packageBin/yara_rules")) { throw "yara_rules directory is missing from package directory" }
 
           "package_name=$packageName" | Out-File -FilePath $env:GITHUB_ENV -Append
           "package_dir=$packageDir" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -226,10 +226,10 @@ jobs:
         run: |
           set -euo pipefail
           tar -czf "dist/${package_name}.tar.gz" -C dist "$package_name"
-          tar -tzf "dist/${package_name}.tar.gz" | grep "${package_name}/bin/manalyze$"
-          tar -tzf "dist/${package_name}.tar.gz" | grep "${package_name}/bin/manalyze.conf$"
-          tar -tzf "dist/${package_name}.tar.gz" | grep "${package_name}/bin/yara_rules/"
-          tar -tzf "dist/${package_name}.tar.gz" | grep "${package_name}/bin/.*plugin_virustotal"
+          tar -tzf "dist/${package_name}.tar.gz" | grep "${package_name}/manalyze$"
+          tar -tzf "dist/${package_name}.tar.gz" | grep "${package_name}/manalyze.conf$"
+          tar -tzf "dist/${package_name}.tar.gz" | grep "${package_name}/yara_rules/"
+          tar -tzf "dist/${package_name}.tar.gz" | grep "${package_name}/.*plugin_virustotal"
 
       - name: Create Windows archive
         if: matrix.platform == 'windows'
@@ -238,11 +238,11 @@ jobs:
           Compress-Archive -Path "dist/$env:package_name" -DestinationPath "dist/$env:package_name.zip" -Force
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $entries = [System.IO.Compression.ZipFile]::OpenRead("dist/$env:package_name.zip").Entries.FullName
-          if (-not ($entries -contains "$env:package_name/bin/manalyze.exe")) { throw "manalyze.exe missing from zip bin directory" }
-          if (-not ($entries | Where-Object { $_ -like "$env:package_name/bin/*.dll" })) { throw "DLL files missing from zip bin directory" }
-          if (-not ($entries | Where-Object { $_ -like "$env:package_name/bin/*plugin_virustotal*" })) { throw "VirusTotal plugin missing from zip bin directory" }
-          if (-not ($entries -contains "$env:package_name/bin/manalyze.conf")) { throw "manalyze.conf missing from zip bin directory" }
-          if (-not ($entries | Where-Object { $_ -like "$env:package_name/bin/yara_rules/*" })) { throw "yara_rules missing from zip bin directory" }
+          if (-not ($entries -contains "$env:package_name/manalyze.exe")) { throw "manalyze.exe missing from zip package directory" }
+          if (-not ($entries | Where-Object { $_ -like "$env:package_name/*.dll" })) { throw "DLL files missing from zip package directory" }
+          if (-not ($entries | Where-Object { $_ -like "$env:package_name/*plugin_virustotal*" })) { throw "VirusTotal plugin missing from zip package directory" }
+          if (-not ($entries -contains "$env:package_name/manalyze.conf")) { throw "manalyze.conf missing from zip package directory" }
+          if (-not ($entries | Where-Object { $_ -like "$env:package_name/yara_rules/*" })) { throw "yara_rules missing from zip package directory" }
 
       - name: Upload Unix release asset
         if: matrix.platform != 'windows'
