@@ -85,7 +85,7 @@ endif()
 
 set(MANALYZE_BOOST_VT_LIBS "")
 if (MANALYZE_BUILD_VIRUSTOTAL)
-    if (NOT Boost_SYSTEM_FOUND)
+    if (NOT Boost_SYSTEM_FOUND AND NOT TARGET Boost::system)
         message(WARNING "Boost::system not found; VirusTotal plugin will not be built.")
         set(MANALYZE_BUILD_VIRUSTOTAL OFF)
     else()

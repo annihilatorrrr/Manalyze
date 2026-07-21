@@ -21,6 +21,10 @@
 #include <atomic>
 #include <cctype>
 
+#ifdef _WIN32
+# include <windows.h>
+#endif
+
 namespace utils
 {
 

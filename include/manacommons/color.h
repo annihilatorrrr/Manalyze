@@ -20,10 +20,13 @@
 #include <iostream>
 #include <string>
 #ifdef _WIN32
-	#include "windows.h"
 #else
 	#include <unistd.h>
 	#include <stdio.h>
+#endif
+
+#ifdef ERROR
+	#undef ERROR
 #endif
 
 #if defined _WIN32 && !defined DECLSPEC_MANACOMMONS
