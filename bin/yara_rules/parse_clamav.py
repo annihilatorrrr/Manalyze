@@ -122,11 +122,19 @@ class YaraRule:
         # This checks for PCRE subsignatures. These consist of a trigger and a regex to perform when the trigger is met
         # https://docs.clamav.net/manual/Signatures/LogicalSignatures.html#pcre-subsignatures
         # Example found on in Win_dot_Trojan_dot_Zebrocy_dash_6743852_dash_2:
-        #   0|(1&2)/6#?87474703A2F2F(3[0-9])[1,3]2E(3[0-9])[1,3]2E(3[0-9])[1,3]2E(3[0-9])[1,3]2F(3[0-9]|[46][1-9A-F]|[57][0-9]|5A|7A|5F|2F|2D)+2E706870/
+        # 0|(1&2)/6#?87474703A2F2F(3[0-9])[1,3]2E(3[0-9])[1,3]2E(3[0-9])[1,3]2E(3[0-9])[1,3]2F(3[0-9]|[46][1-9A-F]|[57][0-9]|5A|7A|5F|2F|2D)+2E706870/
         # This rule checks if subsignatures 0 or 1 and 2 are met, and if so it runs the regex
         # This could be applied to the yara rules, but it would require rewriting the conditions so that rule 3 is the regex on its own, and the conditions are (0 | (1 & 2)) & 3
-        # These were often caught by the previous check that looks for non-hexadecimal alphanumerics, but that doesnt trigger in cases like above
+        # These were often caught by the previous check that looks for non-hexadecimal alphanumerics, but that doesn't trigger in cases like above
         if re.match(r"[\d()<>&|=,]*\/.*\/", s):
+            raise MalformedRuleError("Malformed rule: %s (%s)" % (self._meta_signature, s))
+
+        # This excludes rules that for some reason have an alternate hex value group, but no alternates. I can only think this must be malformed
+        # I've only seen this in one rule, Win.Backdoor.CrimsonRAT-9953760-0, where
+        # 11046f2f00000a2526031f4028650000065a11046f2f00000a(2526|)5b5a1f4428650000065b130503031f4828650000065a11046f3000000a5b035a1f4c2865000006
+        # contains (2526|), which is meant to have hex values after the |, but doesn't. I can't find anything in the docs saying this is valid
+        # The regex finds parenthesis pairs ending in |), which is invalid
+        if re.findall(r"\([^)]+\|\)", s):
             raise MalformedRuleError("Malformed rule: %s (%s)" % (self._meta_signature, s))
 
         self._signatures.append("$a%d = { %s }" % (index, s))
@@ -294,7 +302,7 @@ class YaraRule:
                         sys.exit(1)
                 i += 1
 
-        # In one case, Win.Trojan.AgentTesla-9846789-0, rule 7 is unused, and yara needs all rules to be used
+        # In one case, Win.Trojan.AgentTesla-9846789-0, rule 7 isn't used in the conditions anywhere, and yara needs all rules to be used
         # If there are any numbers in the conditions that are skipped, then the rule should be rejected
         rule_numbers = set([int(x[2:]) for x in re.findall(r"\$a\d+", conditions)])
         if len(set(range(0, max(rule_numbers)+1)).difference(rule_numbers)) != 0:
@@ -373,7 +381,7 @@ def parse_ldb(input, output, is_daily=False, is_quiet=False):
                 # but it occurs in only one daily case, Win.Trojan.Agent-6825810-0-6852456-0
                 # 0:0&((1>20&2>10&3)|(4))
                 # This causes some malformed yara where the 0 rule specifier is duplicated
-                # I'm not sure what possible configurations it could be, but since the logical expression generally cannot accept a colon,
+                # I'm not sure what possible values it could be, but since the logical expression generally cannot accept a colon,
                 # it makes sense to take the second group if it has one
                 if ":" in logical_expression:
                     logical_expression = logical_expression.split(":")[1]
