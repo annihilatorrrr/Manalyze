@@ -46,6 +46,7 @@ class TargetType:
     FLASH = 11
     JAVA = 12
 
+
 yara_rule_template = """rule %s
 {
     meta:
@@ -192,15 +193,15 @@ class YaraRule:
                 x = int(split[0])
                 y = int(split[1])
                 if match.group(2) == '+':
-                    self._conditions.append("$a%d in (%s+%d .. %s + %d)" \
-                                      % (index, base_yara_offset, x, base_yara_offset, x + y))
+                    self._conditions.append("$a%d in (%s+%d .. %s + %d)"
+                                            % (index, base_yara_offset, x, base_yara_offset, x + y))
                 else:
                     if y < x:
-                        self._conditions.append("$a%d in (%s - %d .. %s - %d)" \
-                                          % (index, base_yara_offset, x, base_yara_offset, x - y))
+                        self._conditions.append("$a%d in (%s - %d .. %s - %d)"
+                                                % (index, base_yara_offset, x, base_yara_offset, x - y))
                     elif y > x:
-                        self._conditions.append("$a%d in (%s - %d .. %s + %d)" \
-                                          % (index, base_yara_offset, x, base_yara_offset, y - x))
+                        self._conditions.append("$a%d in (%s - %d .. %s + %d)"
+                                                % (index, base_yara_offset, x, base_yara_offset, y - x))
                     else:  # x == y
                         self._conditions.append("$a%d in (%s - %d .. %s)" % (index, base_yara_offset, x, base_yara_offset))
         else:

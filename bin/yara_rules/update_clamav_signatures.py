@@ -56,7 +56,7 @@ def download_file(url):
         if file_size is None:
             outfile.write(r.content)
             return
-        
+
         downloaded = 0
         chunk_size = 8192
         file_size = int(file_size)
@@ -67,8 +67,6 @@ def download_file(url):
             status = "\r%10d  [%3.2f%%]" % (downloaded, downloaded * 100. / file_size)
             status += chr(8) * (len(status) + 1)
             print(status, end="")
-
-
 
 
 def zlib_decompress(path, outpath):
@@ -139,6 +137,7 @@ def update_signatures(url, download):
         os.remove("%s.ldb" % file_basename)
     os.remove("%s.tar" % file_basename)
     os.remove("%s.ndb" % file_basename)
+
 
 # Work in the script's directory
 if os.path.dirname(sys.argv[0]) != "":
