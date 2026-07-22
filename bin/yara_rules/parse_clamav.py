@@ -22,14 +22,14 @@ import sys
 from string import hexdigits
 
 # Two groups of number separated by a comma, i.e. 200,400
-range_offset_pattern = re.compile("(\d+),(\d+)")
+range_offset_pattern = re.compile(r"(\d+),(\d+)")
 
 # One capital letter followed by one or two letters/numbers (i.e S3, EOF, ...), then possibly a sign and a mix of
 # comma / numbers. This matches offsets like S0+123, EOF-2, SE2, EP+5,10 etc.
 extended_offset_pattern = re.compile("([A-Z][A-Z0-9]{1,2})(([+-])([0-9,]+))?")
 
 # Matches {-number}
-floating_jump_pattern = re.compile("\{\-([0-9]+)\}")
+floating_jump_pattern = re.compile(r"\{\-([0-9]+)\}")
 
 
 class TargetType:
@@ -109,8 +109,8 @@ class YaraRule:
         s = sig
         s = s.replace("*", " [-] ")  # Unbounded jump
         s = s.replace("{0}", "")  # Skipping no bytes. Useless but appears in one signature.
-        s = re.sub("\{\d+\}$", "", s, count=1)  # Remove byte skips at the end of signatures.
-        s = floating_jump_pattern.sub(" {0-\g<1>} ", s)  # Yara doesn't support [-X] jumps, we need [0-X]
+        s = re.sub(r"\{\d+\}$", "", s, count=1)  # Remove byte skips at the end of signatures.
+        s = floating_jump_pattern.sub(r" {0-\g<1>} ", s)  # Yara doesn't support [-X] jumps, we need [0-X]
         s = s.replace("{", "[").replace("}", "]")  # Byte skips
         # Try to guess if it isn't an hexadecimal pattern.
         if any(c in "ghijljmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ" for c in s):
@@ -230,7 +230,7 @@ class YaraRule:
             else:
                 conditions += "any of them"
         else:
-            tokens = re.findall("([=,<>\(\)&\|]|\d+)", self._logical_expression)
+            tokens = re.findall(r"([=,<>\(\)&\|]|\d+)", self._logical_expression)
             i = 0
             while i < len(tokens):
                 t = tokens[i]
