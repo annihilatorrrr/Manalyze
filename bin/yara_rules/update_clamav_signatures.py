@@ -56,7 +56,7 @@ def download_file(url):
         if file_size is None:
             outfile.write(r.content)
             return
-        
+
         downloaded = 0
         chunk_size = 8192
         file_size = int(file_size)
@@ -67,8 +67,6 @@ def download_file(url):
             status = "\r%10d  [%3.2f%%]" % (downloaded, downloaded * 100. / file_size)
             status += chr(8) * (len(status) + 1)
             print(status, end="")
-
-
 
 
 def zlib_decompress(path, outpath):
@@ -91,7 +89,7 @@ def zlib_decompress(path, outpath):
     os.remove(path)
 
 
-def update_signatures(url, download):
+def update_signatures(url, download, quiet):
     # Download CVD file if necessary
     if download:
         download_file(url)
@@ -133,12 +131,13 @@ def update_signatures(url, download):
         tar.extract("%s.ldb" % file_basename)
         os.chmod("%s.ldb" % file_basename, 0o644)
     tar.close()
-    parse_ndb("%s.ndb" % file_basename, "clamav.yara", file_basename != "main")
+    parse_ndb("%s.ndb" % file_basename, "clamav.yara", file_basename != "main", is_quiet=quiet)
     if os.path.exists("%s.ldb" % file_basename):
-        parse_ldb("%s.ldb" % file_basename, "clamav.yara", file_basename != "main")
+        parse_ldb("%s.ldb" % file_basename, "clamav.yara", file_basename != "main", is_quiet=quiet)
         os.remove("%s.ldb" % file_basename)
     os.remove("%s.tar" % file_basename)
     os.remove("%s.ndb" % file_basename)
+
 
 # Work in the script's directory
 if os.path.dirname(sys.argv[0]) != "":
@@ -148,6 +147,7 @@ parser = argparse.ArgumentParser(description="Updates ClamAV signatures for plug
 parser.add_argument("--main", action="store_true", help="Update ClamAV's main signature file.")
 parser.add_argument("--skip-download", dest="skipdownload", action="store_false",
                     help="Work with local copies of ClamAV signature files.")
+parser.add_argument("-q", "--quiet", dest="quiet", help="Suppresses \"Malformed\" and \"Unable to translate logical signature\" messages", action="store_true")
 args = parser.parse_args()
 
 try:
@@ -163,13 +163,13 @@ if args.main:
         os.remove("clamav.main.yara")
     with open("clamav.yara", "wb") as f:
         f.write(b'import "manape"\n\n')  # Do not forget to import our module.
-    update_signatures(URL_MAIN, args.skipdownload)
+    update_signatures(URL_MAIN, args.skipdownload, args.quiet)
     shutil.copy("clamav.yara", "clamav.main.yara")  # Keep a copy to which we can append future daily signature files.
 else:
     # Use the old clamav.main.yara as a base and append the daily rules to it.
     shutil.copy("clamav.main.yara", "clamav.yara")
 
-update_signatures(URL_DAILY, args.skipdownload)
+update_signatures(URL_DAILY, args.skipdownload, args.quiet)
 
 try:
     os.remove("clamav.yarac")

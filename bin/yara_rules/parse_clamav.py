@@ -21,15 +21,17 @@ import re
 import sys
 from string import hexdigits
 
+quiet = False
+
 # Two groups of number separated by a comma, i.e. 200,400
-range_offset_pattern = re.compile("(\d+),(\d+)")
+range_offset_pattern = re.compile(r"(\d+),(\d+)")
 
 # One capital letter followed by one or two letters/numbers (i.e S3, EOF, ...), then possibly a sign and a mix of
 # comma / numbers. This matches offsets like S0+123, EOF-2, SE2, EP+5,10 etc.
 extended_offset_pattern = re.compile("([A-Z][A-Z0-9]{1,2})(([+-])([0-9,]+))?")
 
 # Matches {-number}
-floating_jump_pattern = re.compile("\{\-([0-9]+)\}")
+floating_jump_pattern = re.compile(r"\{\-([0-9]+)\}")
 
 
 class TargetType:
@@ -45,6 +47,7 @@ class TargetType:
     PDF = 10
     FLASH = 11
     JAVA = 12
+
 
 yara_rule_template = """rule %s
 {
@@ -108,14 +111,33 @@ class YaraRule:
         s = sig
         s = s.replace("*", " [-] ")  # Unbounded jump
         s = s.replace("{0}", "")  # Skipping no bytes. Useless but appears in one signature.
-        s = re.sub("\{\d+\}$", "", s, count=1)  # Remove byte skips at the end of signatures.
-        s = floating_jump_pattern.sub(" {0-\g<1>} ", s)  # Yara doesn't support [-X] jumps, we need [0-X]
+        s = re.sub(r"\{\d+\}$", "", s, count=1)  # Remove byte skips at the end of signatures.
+        s = floating_jump_pattern.sub(r" {0-\g<1>} ", s)  # Yara doesn't support [-X] jumps, we need [0-X]
         s = s.replace("{", "[").replace("}", "]")  # Byte skips
+
         # Try to guess if it isn't an hexadecimal pattern.
         if any(c in "ghijljmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ" for c in s):
             raise MalformedRuleError("Malformed rule: %s (%s)" % (self._meta_signature, s))
-        else:
-            self._signatures.append("$a%d = { %s }" % (index, s))
+
+        # This checks for PCRE subsignatures. These consist of a trigger and a regex to perform when the trigger is met
+        # https://docs.clamav.net/manual/Signatures/LogicalSignatures.html#pcre-subsignatures
+        # Example found on in Win_dot_Trojan_dot_Zebrocy_dash_6743852_dash_2:
+        # 0|(1&2)/6#?87474703A2F2F(3[0-9])[1,3]2E(3[0-9])[1,3]2E(3[0-9])[1,3]2E(3[0-9])[1,3]2F(3[0-9]|[46][1-9A-F]|[57][0-9]|5A|7A|5F|2F|2D)+2E706870/
+        # This rule checks if subsignatures 0 or 1 and 2 are met, and if so it runs the regex
+        # This could be applied to the yara rules, but it would require rewriting the conditions so that rule 3 is the regex on its own, and the conditions are (0 | (1 & 2)) & 3
+        # These were often caught by the previous check that looks for non-hexadecimal alphanumerics, but that doesn't trigger in cases like above
+        if re.match(r"[\d()<>&|=,]*\/.*\/", s):
+            raise MalformedRuleError("Malformed rule: %s (%s)" % (self._meta_signature, s))
+
+        # This excludes rules that for some reason have an alternate hex value group, but no alternates. I can only think this must be malformed
+        # I've only seen this in one rule, Win.Backdoor.CrimsonRAT-9953760-0, where
+        # 11046f2f00000a2526031f4028650000065a11046f2f00000a(2526|)5b5a1f4428650000065b130503031f4828650000065a11046f3000000a5b035a1f4c2865000006
+        # contains (2526|), which is meant to have hex values after the |, but doesn't. I can't find anything in the docs saying this is valid
+        # The regex finds parenthesis pairs ending in |), which is invalid
+        if re.findall(r"\([^)]+\|\)", s):
+            raise MalformedRuleError("Malformed rule: %s (%s)" % (self._meta_signature, s))
+
+        self._signatures.append("$a%d = { %s }" % (index, s))
 
     def _translate_offset(self, offset, index):
         # Handle simple cases first: find pattern anywhere.
@@ -192,15 +214,15 @@ class YaraRule:
                 x = int(split[0])
                 y = int(split[1])
                 if match.group(2) == '+':
-                    self._conditions.append("$a%d in (%s+%d .. %s + %d)" \
-                                      % (index, base_yara_offset, x, base_yara_offset, x + y))
+                    self._conditions.append("$a%d in (%s+%d .. %s + %d)"
+                                            % (index, base_yara_offset, x, base_yara_offset, x + y))
                 else:
                     if y < x:
-                        self._conditions.append("$a%d in (%s - %d .. %s - %d)" \
-                                          % (index, base_yara_offset, x, base_yara_offset, x - y))
+                        self._conditions.append("$a%d in (%s - %d .. %s - %d)"
+                                                % (index, base_yara_offset, x, base_yara_offset, x - y))
                     elif y > x:
-                        self._conditions.append("$a%d in (%s - %d .. %s + %d)" \
-                                          % (index, base_yara_offset, x, base_yara_offset, y - x))
+                        self._conditions.append("$a%d in (%s - %d .. %s + %d)"
+                                                % (index, base_yara_offset, x, base_yara_offset, y - x))
                     else:  # x == y
                         self._conditions.append("$a%d in (%s - %d .. %s)" % (index, base_yara_offset, x, base_yara_offset))
         else:
@@ -229,7 +251,7 @@ class YaraRule:
             else:
                 conditions += "any of them"
         else:
-            tokens = re.findall("([=,<>\(\)&\|]|\d+)", self._logical_expression)
+            tokens = re.findall(r"([=,<>\(\)&\|]|\d+)", self._logical_expression)
             i = 0
             while i < len(tokens):
                 t = tokens[i]
@@ -243,7 +265,8 @@ class YaraRule:
                     # If they haven't been detected while looking ahead, it means that
                     # they arrive after a full expression (i.e. (0&1)>X,Y), which can't
                     # be translated to a Yara rule as far as I know.
-                    print("Unable to translate a logical signature for %s. Skipping..." % self._meta_signature)
+                    if not quiet:
+                        print("Unable to translate a logical signature for %s. Skipping..." % self._meta_signature)
                     return ""
                 else:
                     try:
@@ -251,7 +274,8 @@ class YaraRule:
                         # Check for a negation or a count
                         if i + 2 < len(tokens) and (tokens[i+1] == "=" or tokens[i+1] == ">" or tokens[i+1] == "<"):
                             if i + 3 < len(tokens) and tokens[i+2] == ",":
-                                print("Unable to translate a logical signature for %s. Skipping..." % self._meta_signature)
+                                if not quiet:
+                                    print("Unable to translate a logical signature for %s. Skipping..." % self._meta_signature)
                                 return ""
                             if tokens[i+1] == "=" and tokens[i+2] == "0":  # Negation
                                 conditions += "not %s" % self._conditions[index]
@@ -278,10 +302,19 @@ class YaraRule:
                         sys.exit(1)
                 i += 1
 
+        # In one case, Win.Trojan.AgentTesla-9846789-0, rule 7 isn't used in the conditions anywhere, and yara needs all rules to be used
+        # If there are any numbers in the conditions that are skipped, then the rule should be rejected
+        rule_numbers = set([int(x[2:]) for x in re.findall(r"\$a\d+", conditions)])
+        if len(set(range(0, max(rule_numbers)+1)).difference(rule_numbers)) != 0:
+            raise MalformedRuleError("Rule missing from conditions")
+
         return yara_rule_template % (self._rulename, self._meta_signature, signatures, conditions)
 
 
-def parse_ndb(input, output, is_daily=False):
+def parse_ndb(input, output, is_daily=False, is_quiet=False):
+    global quiet
+    if is_quiet:
+        quiet = True
     with open(input) as f:
         with open(output, 'ab') as g:
             for line in f:
@@ -303,7 +336,8 @@ def parse_ndb(input, output, is_daily=False):
                 try:
                     rule = YaraRule(malware_name, [[signature, offset]], is_daily=is_daily)
                 except MalformedRuleError:
-                    print("Rule %s seems to be malformed. Skipping..." % malware_name)
+                    if not quiet:
+                        print("Rule %s seems to be malformed. Skipping..." % malware_name)
                     continue
 
                 if not rule.get_meta_signature() in RULES:
@@ -313,7 +347,10 @@ def parse_ndb(input, output, is_daily=False):
                     print("Rule %s already exists!" % rule.get_meta_signature())
 
 
-def parse_ldb(input, output, is_daily=False):
+def parse_ldb(input, output, is_daily=False, is_quiet=False):
+    global quiet
+    if is_quiet:
+        quiet = True
     with open(input) as f:
         with open(output, 'ab') as g:
             for line in f:
@@ -340,6 +377,15 @@ def parse_ldb(input, output, is_daily=False):
                 if any('!' in r for r in rules):  # Skip rules containing "!" such as "...!(01|02|03)..."
                     continue                      # which do not translate to Yara rules.
 
+                # I cannot find any documentation about why there would be a colon in the logical expression,
+                # but it occurs in only one daily case, Win.Trojan.Agent-6825810-0-6852456-0
+                # 0:0&((1>20&2>10&3)|(4))
+                # This causes some malformed yara where the 0 rule specifier is duplicated
+                # I'm not sure what possible values it could be, but since the logical expression generally cannot accept a colon,
+                # it makes sense to take the second group if it has one
+                if ":" in logical_expression:
+                    logical_expression = logical_expression.split(":")[1]
+
                 signatures = []
                 for r in rules:
                     r_split = r.split(":")
@@ -352,7 +398,8 @@ def parse_ldb(input, output, is_daily=False):
                     rule = YaraRule(malware_name, signatures, logical_expression=logical_expression, is_daily=is_daily)
                     translated_rule = rule.__str__()
                 except MalformedRuleError:
-                    print("Rule %s seems to be malformed. Skipping..." % malware_name)
+                    if not quiet:
+                        print("Rule %s seems to be malformed. Skipping..." % malware_name)
                     continue
 
                 if not rule.get_meta_signature() in RULES and translated_rule:
@@ -366,7 +413,10 @@ def main():
     parser = argparse.ArgumentParser(description="Parses ClamAV signatures and translates them to Yara rules.")
     parser.add_argument("-i", "--input", dest="input", help="The file to parse.")
     parser.add_argument("-o", "--output", dest="output", help="The destination file for the Yara rules.")
+    parser.add_argument("-q", "--quiet", dest="quiet", help="Suppresses \"Malformed\" and \"Unable to translate logical signature\" messages", action="store_true")
     args = parser.parse_args()
+    if args.quiet:
+        quiet = True
     if args.input.endswith(".ndb"):
         parse_ndb(args.input, args.output)
     elif args.input.endswith(".ldb"):
