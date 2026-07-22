@@ -112,11 +112,22 @@ class YaraRule:
         s = re.sub(r"\{\d+\}$", "", s, count=1)  # Remove byte skips at the end of signatures.
         s = floating_jump_pattern.sub(r" {0-\g<1>} ", s)  # Yara doesn't support [-X] jumps, we need [0-X]
         s = s.replace("{", "[").replace("}", "]")  # Byte skips
+
         # Try to guess if it isn't an hexadecimal pattern.
         if any(c in "ghijljmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ" for c in s):
             raise MalformedRuleError("Malformed rule: %s (%s)" % (self._meta_signature, s))
-        else:
-            self._signatures.append("$a%d = { %s }" % (index, s))
+
+        # This checks for PCRE subsignatures. These consist of a trigger and a regex to perform when the trigger is met
+        # https://docs.clamav.net/manual/Signatures/LogicalSignatures.html#pcre-subsignatures
+        # Example found on in Win_dot_Trojan_dot_Zebrocy_dash_6743852_dash_2:
+        #   0|(1&2)/6#?87474703A2F2F(3[0-9])[1,3]2E(3[0-9])[1,3]2E(3[0-9])[1,3]2E(3[0-9])[1,3]2F(3[0-9]|[46][1-9A-F]|[57][0-9]|5A|7A|5F|2F|2D)+2E706870/
+        # This rule checks if subsignatures 0 or 1 and 2 are met, and if so it runs the regex
+        # This could be applied to the yara rules, but it would require rewriting the conditions so that rule 3 is the regex on its own, and the conditions are (0 | (1 & 2)) & 3
+        # These were often caught by the previous check that looks for non-hexadecimal alphanumerics, but that doesnt trigger in cases like above
+        if re.match(r"[\d()<>&|=,]*\/.*\/", s):
+            raise MalformedRuleError("Malformed rule: %s (%s)" % (self._meta_signature, s))
+
+        self._signatures.append("$a%d = { %s }" % (index, s))
 
     def _translate_offset(self, offset, index):
         # Handle simple cases first: find pattern anywhere.
