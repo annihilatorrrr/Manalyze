@@ -21,6 +21,8 @@ import re
 import sys
 from string import hexdigits
 
+quiet = False
+
 # Two groups of number separated by a comma, i.e. 200,400
 range_offset_pattern = re.compile(r"(\d+),(\d+)")
 
@@ -255,7 +257,8 @@ class YaraRule:
                     # If they haven't been detected while looking ahead, it means that
                     # they arrive after a full expression (i.e. (0&1)>X,Y), which can't
                     # be translated to a Yara rule as far as I know.
-                    print("Unable to translate a logical signature for %s. Skipping..." % self._meta_signature)
+                    if not quiet:
+                        print("Unable to translate a logical signature for %s. Skipping..." % self._meta_signature)
                     return ""
                 else:
                     try:
@@ -263,7 +266,8 @@ class YaraRule:
                         # Check for a negation or a count
                         if i + 2 < len(tokens) and (tokens[i+1] == "=" or tokens[i+1] == ">" or tokens[i+1] == "<"):
                             if i + 3 < len(tokens) and tokens[i+2] == ",":
-                                print("Unable to translate a logical signature for %s. Skipping..." % self._meta_signature)
+                                if not quiet:
+                                    print("Unable to translate a logical signature for %s. Skipping..." % self._meta_signature)
                                 return ""
                             if tokens[i+1] == "=" and tokens[i+2] == "0":  # Negation
                                 conditions += "not %s" % self._conditions[index]
@@ -293,7 +297,10 @@ class YaraRule:
         return yara_rule_template % (self._rulename, self._meta_signature, signatures, conditions)
 
 
-def parse_ndb(input, output, is_daily=False):
+def parse_ndb(input, output, is_daily=False, is_quiet=False):
+    global quiet
+    if is_quiet:
+        quiet = True
     with open(input) as f:
         with open(output, 'ab') as g:
             for line in f:
@@ -315,7 +322,8 @@ def parse_ndb(input, output, is_daily=False):
                 try:
                     rule = YaraRule(malware_name, [[signature, offset]], is_daily=is_daily)
                 except MalformedRuleError:
-                    print("Rule %s seems to be malformed. Skipping..." % malware_name)
+                    if not quiet:
+                        print("Rule %s seems to be malformed. Skipping..." % malware_name)
                     continue
 
                 if not rule.get_meta_signature() in RULES:
@@ -325,7 +333,10 @@ def parse_ndb(input, output, is_daily=False):
                     print("Rule %s already exists!" % rule.get_meta_signature())
 
 
-def parse_ldb(input, output, is_daily=False):
+def parse_ldb(input, output, is_daily=False, is_quiet=False):
+    global quiet
+    if is_quiet:
+        quiet = True
     with open(input) as f:
         with open(output, 'ab') as g:
             for line in f:
@@ -352,6 +363,15 @@ def parse_ldb(input, output, is_daily=False):
                 if any('!' in r for r in rules):  # Skip rules containing "!" such as "...!(01|02|03)..."
                     continue                      # which do not translate to Yara rules.
 
+                # I cannot find any documentation about why there would be a colon in the logical expression, 
+                # but it occurs in only one daily case, Win.Trojan.Agent-6825810-0-6852456-0
+                # 0:0&((1>20&2>10&3)|(4))
+                # This causes some malformed yara where the 0 rule specifier is duplicated
+                # I'm not sure what possible configurations it could be, but since the logical expression generally cannot accept a colon,
+                # it makes sense to take the second group if it has one
+                if ":" in logical_expression:
+                    logical_expression = logical_expression.split(":")[1]
+
                 signatures = []
                 for r in rules:
                     r_split = r.split(":")
@@ -364,7 +384,8 @@ def parse_ldb(input, output, is_daily=False):
                     rule = YaraRule(malware_name, signatures, logical_expression=logical_expression, is_daily=is_daily)
                     translated_rule = rule.__str__()
                 except MalformedRuleError:
-                    print("Rule %s seems to be malformed. Skipping..." % malware_name)
+                    if not quiet:
+                        print("Rule %s seems to be malformed. Skipping..." % malware_name)
                     continue
 
                 if not rule.get_meta_signature() in RULES and translated_rule:
@@ -378,7 +399,10 @@ def main():
     parser = argparse.ArgumentParser(description="Parses ClamAV signatures and translates them to Yara rules.")
     parser.add_argument("-i", "--input", dest="input", help="The file to parse.")
     parser.add_argument("-o", "--output", dest="output", help="The destination file for the Yara rules.")
+    parser.add_argument("-q", "--quiet", dest="quiet", help="Suppresses \"Malformed\" and \"Unable to translate logical signature\" messages", action="store_true")
     args = parser.parse_args()
+    if args.quiet:
+        quiet = True
     if args.input.endswith(".ndb"):
         parse_ndb(args.input, args.output)
     elif args.input.endswith(".ldb"):
