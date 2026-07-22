@@ -294,6 +294,12 @@ class YaraRule:
                         sys.exit(1)
                 i += 1
 
+        # In one case, Win.Trojan.AgentTesla-9846789-0, rule 7 is unused, and yara needs all rules to be used
+        # If there are any numbers in the conditions that are skipped, then the rule should be rejected
+        rule_numbers = set([int(x[2:]) for x in re.findall(r"\$a\d+", conditions)])
+        if len(set(range(0, max(rule_numbers)+1)).difference(rule_numbers)) != 0:
+            raise MalformedRuleError("Rule missing from conditions")
+
         return yara_rule_template % (self._rulename, self._meta_signature, signatures, conditions)
 
 
@@ -363,7 +369,7 @@ def parse_ldb(input, output, is_daily=False, is_quiet=False):
                 if any('!' in r for r in rules):  # Skip rules containing "!" such as "...!(01|02|03)..."
                     continue                      # which do not translate to Yara rules.
 
-                # I cannot find any documentation about why there would be a colon in the logical expression, 
+                # I cannot find any documentation about why there would be a colon in the logical expression,
                 # but it occurs in only one daily case, Win.Trojan.Agent-6825810-0-6852456-0
                 # 0:0&((1>20&2>10&3)|(4))
                 # This causes some malformed yara where the 0 rule specifier is duplicated
